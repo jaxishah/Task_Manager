@@ -109,14 +109,7 @@ $config = [
                     'GET api/tags' => 'api/task/tag-list',
             ],
         ],
-        /*
-        'urlManager' => [
-            'enablePrettyUrl' => true,
-            'showScriptName' => false,
-            'rules' => [
-            ],
-        ],
-        */
+     
         'taskService' => [
             'class' => \app\services\TaskService::class,
         ],

@@ -67,9 +67,6 @@ class TaskController extends Controller
      */
     public function actionView($id)
     {
-       // $model = $this->findModel($id);
-        // eager load tags
-       // $model->populateRelation('tags', $model->tags);
         $result = $this->taskService->getTask($id);
         return $this->render('view', ['model' => $result]);
     }

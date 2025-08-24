@@ -70,7 +70,7 @@ class Task extends \yii\db\ActiveRecord
             [['created_at', 'updated_at', 'deleted_at'], 'integer'],
             [['status'], 'default', 'value' => self::STATUS_PENDING],
             [['priority'], 'default', 'value' => self::PRIORITY_MEDIUM],  
-            //['tagIds', 'each', 'rule' => ['safe']],
+            ['tagIds', 'each', 'rule' => ['safe']],
             ['tagIds', 'validateTagLength'],
             [
                 ['tagIds'],

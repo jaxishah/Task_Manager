@@ -8,6 +8,10 @@ use yii\web\UnauthorizedHttpException;
 
 class SimpleBearerAuth extends HttpBearerAuth
 {
+    /**
+     * 
+     *  Authenticate dummy token
+     */
     public function authenticate($user, $request, $response)
     {
         $authHeader = $request->getHeaders()->get('Authorization');

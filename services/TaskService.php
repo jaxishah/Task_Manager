@@ -82,7 +82,6 @@ class TaskService
      */
     public function updateTask(Task $task, array $data, bool $isApi = false): bool
     {
-       // return $task->load($data) && $task->save();
         // load data ('' means no form name prefix for API JSON body)
         $formName = $isApi ? '' : null;
         $task->load($data, $formName);
