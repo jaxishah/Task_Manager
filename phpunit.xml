@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" bootstrap="tests/bootstrap.php" colors="true" stopOnFailure="false" failOnRisky="true" failOnWarning="true" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.0/phpunit.xsd" cacheDirectory=".phpunit.cache">
+  <testsuites>
+    <testsuite name="Application Test Suite">
+      <directory>./tests</directory>
+    </testsuite>
+  </testsuites>
+  <php>
+    <!-- ensure we use test environment -->
+    <env name="YII_ENV" value="test"/>
+    <env name="YII_DEBUG" value="1"/>
+  </php>
+</phpunit>

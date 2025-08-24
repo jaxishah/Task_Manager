@@ -8,9 +8,14 @@ use yii\helpers\ArrayHelper;
 use yii\db\ActiveQuery;
 use app\models\TaskLog;
 
-
 /**
- * This is the model class for table "task".
+ * Task ActiveRecord Model for table `tasks`.
+ *
+ * Represents a single task entity, with built-in support for:
+ *  - soft delete (via `deleted_at`)
+ *  - status/priority enums
+ *  - tag relations (many-to-many)
+ *  - automatic logging of create/update/delete actions
  *
  * @property int $id
  * @property string $title
@@ -20,7 +25,14 @@ use app\models\TaskLog;
  * @property string|null $due_date
  * @property int $created_at
  * @property int $updated_at
+ * @property int|null $deleted_at
+ *
+ * @property Tag[] $tags
+ * @property TaskTag[] $taskTags
+ * @property string[] $tagNames Virtual attribute: array of tag names
+ * @property int[] $tagIds Virtual attribute: array of tag IDs
  */
+
 class Task extends \yii\db\ActiveRecord
 {
 
@@ -55,8 +67,14 @@ class Task extends \yii\db\ActiveRecord
         $this->tagIds = is_array($value) ? $value : [];
     }
 
-    /**
-     * {@inheritdoc}
+   /**
+     * Validation rules for Task model.
+     * - Ensures title is required & within length
+     * - Enforces valid ENUM values for status/priority
+     * - Validates due_date format
+     * - Applies validation for tag IDs & tag name length
+     *
+     * @return array
      */
     public function rules()
     {
@@ -78,6 +96,10 @@ class Task extends \yii\db\ActiveRecord
             ],
         ];
     }
+
+    /**
+     * Validate that string tag names do not exceed 30 chars.
+     */
     public function validateTagLength($attribute, $params)
     {
         if (!empty($this->$attribute)) {
@@ -88,6 +110,10 @@ class Task extends \yii\db\ActiveRecord
             }
         }
     }
+
+    /**
+     * Validate that all integer tag IDs exist in database.
+     */
 
     public function validateTagIds($attribute, $params)
     {
@@ -115,6 +141,11 @@ class Task extends \yii\db\ActiveRecord
         }
     }
 
+    /**
+     * Auto-manage created_at/updated_at timestamps.
+     *
+     * @return array
+     */
     public function behaviors()
     {
         return [
@@ -131,10 +162,22 @@ class Task extends \yii\db\ActiveRecord
         ];
     }
 
+    /**
+     * Relation: Task → TaskTag (pivot table).
+     *
+     * @return ActiveQuery
+     */
+
     public function getTaskTags()
     {
         return $this->hasMany(TaskTag::class, ['task_id' => 'id']);
     }
+
+    /**
+     * Relation: Task → Tags (many-to-many).
+     *
+     * @return ActiveQuery
+     */
 
     public function getTags()
     {
@@ -142,12 +185,22 @@ class Task extends \yii\db\ActiveRecord
             ->viaTable('{{%task_tags}}', ['task_id' => 'id']);
     }
 
+    /**
+     * Perform a soft delete by setting deleted_at timestamp.
+     *
+     * @return bool
+     */
     public function softDelete()
     {
         $this->deleted_at = time();
         return $this->save(false, ['deleted_at']);
         
     }
+
+    /**
+     * Before validation hook.
+     * Removes duplicate tagIds if provided.
+     */
 
     public function beforeValidate()
     {
@@ -158,13 +211,20 @@ class Task extends \yii\db\ActiveRecord
         return parent::beforeValidate();
     }
 
-
-     public function afterFind(): void
+    /**
+     * After record is fetched, populate tagIds & tagNames.
+     */
+    public function afterFind(): void
     {
         parent::afterFind();
         $this->tagIds   = ArrayHelper::getColumn($this->tags, 'id');
         $this->tagNames = ArrayHelper::getColumn($this->tags, 'name');
     }
+
+    /**
+     * After save hook.
+     * Logs changes to TaskLog (create, update, delete).
+     */
 
     public function afterSave($insert, $changedAttributes): void
     {
@@ -181,6 +241,12 @@ class Task extends \yii\db\ActiveRecord
         }
     }
 
+    /**
+     * Write a TaskLog entry for create/update/delete.
+     *
+     * @param string $action
+     * @param array $changedAttributes
+     */
     protected function logChange(string $action, array $changedAttributes = [])
     {
         if ($action === 'update') {
@@ -204,8 +270,10 @@ class Task extends \yii\db\ActiveRecord
         $log->save(false);
     }
 
-    /**
-     * Exclude soft-deleted records by default
+   /**
+     * Override default find() to exclude soft deleted records.
+     *
+     * @return ActiveQuery
      */
     public static function find(): ActiveQuery
     {
