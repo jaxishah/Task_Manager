@@ -2,7 +2,7 @@
 
 use yii\helpers\Html;
 use yii\widgets\DetailView;
-
+use yii\helpers\ArrayHelper;
 /** @var yii\web\View $this */
 /** @var app\models\Task $model */
 
@@ -29,18 +29,22 @@ $this->params['breadcrumbs'][] = $this->title;
     <?= DetailView::widget([
         'model' => $model,
         'attributes' => [
-            'id',
             'title',
             'description:ntext',
             'status',
             'priority',
             'due_date',
+             [
+                'label' => 'Tags',
+                'value' => implode(', ', \yii\helpers\ArrayHelper::getColumn($model->tags, 'name')),
+            ],
             [
                 'attribute' => 'created_at',
                 'value' => function ($model) {
                     return Yii::$app->formatter->asDatetime($model->created_at);
                 },
             ],
+           
             [
                 'attribute' => 'updated_at',
                 'value' => function ($model) {

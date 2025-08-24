@@ -3,8 +3,11 @@
 namespace app\models;
 use yii\behaviors\TimestampBehavior;
 use yii\db\ActiveRecord;
+use yii\helpers\ArrayHelper;
 
-use Yii;
+use yii\db\ActiveQuery;
+use app\models\TaskLog;
+
 
 /**
  * This is the model class for table "task".
@@ -31,12 +34,25 @@ class Task extends \yii\db\ActiveRecord
     const PRIORITY_MEDIUM = 'medium';
     const PRIORITY_HIGH = 'high';
 
+     /** @var int[] tag IDs supplied from UI/API */
+    public $tagIds;
+
+    /** @var string[] tag names supplied from UI/API */
+    public array $tagNames = [];
+
     /**
      * {@inheritdoc}
      */
     public static function tableName()
     {
-        return 'task';
+        return '{{%tasks}}';
+    }
+
+
+    public function setTagIds($value): void
+    {
+        // If blank or null, assign empty array
+        $this->tagIds = is_array($value) ? $value : [];
     }
 
     /**
@@ -45,20 +61,61 @@ class Task extends \yii\db\ActiveRecord
     public function rules()
     {
         return [
-            [['description', 'due_date'], 'default', 'value' => null],
-            [['status'], 'default', 'value' => 'pending'],
-            [['priority'], 'default', 'value' => 'medium'],
             [['title'], 'required'],
-            [['description', 'status', 'priority'], 'string'],
-            [['due_date'], 'safe'],
-            [['created_at', 'updated_at'], 'integer'],
-            [['title'], 'string', 'max' => 255],
+            [['title'], 'string', 'min' => 5,'max' => 255],
+            [['description'], 'string'],
             ['status', 'in', 'range' => array_keys(self::optsStatus())],
             ['priority', 'in', 'range' => array_keys(self::optsPriority())],
+            [['due_date'], 'date', 'format' => 'php:Y-m-d'],
+            [['created_at', 'updated_at', 'deleted_at'], 'integer'],
+            [['status'], 'default', 'value' => self::STATUS_PENDING],
+            [['priority'], 'default', 'value' => self::PRIORITY_MEDIUM],  
+            //['tagIds', 'each', 'rule' => ['safe']],
+            ['tagIds', 'validateTagLength'],
+            [
+                ['tagIds'],
+                'validateTagIds',
+            ],
         ];
     }
+    public function validateTagLength($attribute, $params)
+    {
+        if (!empty($this->$attribute)) {
+            foreach ($this->$attribute as $tag) {
+                if (is_string($tag) && mb_strlen($tag) > 30) {
+                    $this->addError($attribute, "Tag '{$tag}' is too long (max 30 chars).");
+                }
+            }
+        }
+    }
 
-     public function behaviors()
+    public function validateTagIds($attribute, $params)
+    {
+        if (!empty($this->tagIds)) {
+            // Separate IDs vs strings
+            $ids = array_filter($this->tagIds, 'is_int');
+            $invalid = [];
+
+            if (!empty($ids)) {
+                $validIds = Tag::find()
+                    ->select('id')
+                    ->where(['id' => $ids])
+                    ->column();
+
+                $invalid = array_diff($ids, $validIds);
+            }
+
+            // Only mark error if invalid **IDs** exist
+            if (!empty($invalid)) {
+                $this->addError(
+                    $attribute,
+                    'Invalid tag IDs: ' . implode(', ', $invalid)
+                );
+            }
+        }
+    }
+
+    public function behaviors()
     {
         return [
             [
@@ -72,6 +129,114 @@ class Task extends \yii\db\ActiveRecord
                 },
             ],
         ];
+    }
+
+    public function getTaskTags()
+    {
+        return $this->hasMany(TaskTag::class, ['task_id' => 'id']);
+    }
+
+    public function getTags()
+    {
+        return $this->hasMany(Tag::class, ['id' => 'tag_id'])
+            ->viaTable('{{%task_tags}}', ['task_id' => 'id']);
+    }
+
+    public function softDelete()
+    {
+        $this->deleted_at = time();
+        return $this->save(false, ['deleted_at']);
+        
+    }
+
+    public function beforeValidate()
+    {
+        if (is_array($this->tagIds)) {
+            // Remove duplicates, reindex
+            $this->tagIds = array_values(array_unique($this->tagIds, SORT_REGULAR));
+        }
+        return parent::beforeValidate();
+    }
+
+
+     public function afterFind(): void
+    {
+        parent::afterFind();
+        $this->tagIds   = ArrayHelper::getColumn($this->tags, 'id');
+        $this->tagNames = ArrayHelper::getColumn($this->tags, 'name');
+    }
+
+    public function afterSave($insert, $changedAttributes): void
+    {
+        parent::afterSave($insert, $changedAttributes);
+        if ($insert) {
+            // New record created → full snapshot
+            $this->logChange('create');
+        } elseif (array_key_exists('deleted_at', $changedAttributes) && $changedAttributes['deleted_at'] === null   && $this->deleted_at !== null) {
+            // Soft deleted → final snapshot
+            $this->logChange('delete');
+        } else {
+            // Normal update → store old/new diff
+            $this->logChange('update', $changedAttributes);
+        }
+    }
+
+    protected function logChange(string $action, array $changedAttributes = [])
+    {
+        if ($action === 'update') {
+            $data = [];
+            foreach ($changedAttributes as $attribute => $oldValue) {
+                $data[$attribute] = [
+                    'old' => $oldValue,
+                    'new' => $this->$attribute, // current value after save
+                ];
+            }
+        } elseif ($action === 'create') {
+            $data = $this->attributes; // full snapshot of record
+        } elseif ($action === 'delete') {
+            $data = $this->attributes; // final snapshot before deletion
+        }
+        $log = new TaskLog();
+        $log->task_id = $this->id;
+        $log->action = $action;
+        $log->changed_data = json_encode($data, JSON_UNESCAPED_UNICODE);
+        $log->created_at = time();
+        $log->save(false);
+    }
+
+    /**
+     * Exclude soft-deleted records by default
+     */
+    public static function find(): ActiveQuery
+    {
+        return parent::find()->alias('t')->andWhere(['t.deleted_at' => null]);
+    }
+
+    /**
+     * Restore soft deleted record
+     */
+    public function restore(): bool
+    {
+        return (bool)$this->updateAttributes([
+            'deleted_at' => null,
+        ]);
+    }
+
+    /**
+     * Scope to include deleted records if needed
+     */
+    public static function findWithDeleted(): ActiveQuery
+    {
+        return parent::find()->alias('t');
+    }
+
+    public function fields(): array
+    {
+        $fields = parent::fields();
+        $fields['tags'] = function ($model) {
+            return ArrayHelper::getColumn($model->tags, 'name');
+        };
+        return $fields;
     }
 
     /**
@@ -88,6 +253,9 @@ class Task extends \yii\db\ActiveRecord
             'due_date' => 'Due Date',
             'created_at' => 'Created At',
             'updated_at' => 'Updated At',
+            'deleted_at'  => 'Deleted At',
+            'tagIds'      => 'Tags',
+            'tagNames'    => 'Tags',
         ];
     }
 

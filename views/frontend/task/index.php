@@ -29,14 +29,36 @@ $this->params['breadcrumbs'][] = $this->title;
         'columns' => [
             ['class' => 'yii\grid\SerialColumn'],
 
-            'id',
             'title',
-            'description:ntext',
-            'status',
-            'priority',
-            //'due_date',
-            //'created_at',
-            //'updated_at',
+            [
+                'attribute' => 'status',
+                'filter' => [
+                    'pending' => 'Pending',
+                    'in_progress' => 'In Progress',
+                    'completed' => 'Completed',
+                ],
+                'value' => function ($model) {
+                    return $model->status;
+                }
+            ],
+            [
+                'attribute' => 'priority', 
+                'filter' => [
+                    'low' => 'Low',
+                    'medium' => 'Medium',
+                    'high' => 'High',
+                ],
+                'value' => function ($model) {
+                    return $model->priority ?: '(not set)'; // handle empty/null values
+                },
+            ],
+            [
+                'attribute' => 'due_date',
+                //'format' => ['date', 'php:Y-m-d'], // format date nicely
+                'value' => function ($model) {
+                    return $model->due_date ?: '(not set)';
+                },
+            ],
             [
                 'class' => ActionColumn::className(),
                 'urlCreator' => function ($action, Task $model, $key, $index, $column) {

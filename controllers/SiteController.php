@@ -12,6 +12,11 @@ use app\models\ContactForm;
 
 class SiteController extends Controller
 {
+    public $layout = '@app/views/frontend/layouts/main.php';
+    public function getViewPath()
+    {
+        return \Yii::getAlias('@app/views/frontend/site');
+    }
     /**
      * {@inheritdoc}
      */
